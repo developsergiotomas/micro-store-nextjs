@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Microfrontend Main (Products)
+  main:
+    build:
+      context: .
+      dockerfile: apps/main/Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/main/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+    command: pnpm dev:main
+    networks:
+      - microfrontends
+    depends_on:
+      - install-deps
+
+  # Microfrontend Checkout
+  checkout:
+    build:
+      context: .
+      dockerfile: apps/checkout/Dockerfile
+      target: development
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/checkout/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    command: pnpm dev:checkout
+    networks:
+      - microfrontends
+    depends_on:
+      - install-deps
+
+  # Service para instalar dependências
+  install-deps:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dependencies
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: pnpm install
+    networks:
+      - microfrontends
+
+  # Nginx para roteamento dos microfrontends
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - main
+      - checkout
+    networks:
+      - microfrontends
+
+networks:
+  microfrontends:
+    driver: bridge

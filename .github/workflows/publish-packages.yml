@@ -1,0 +1,89 @@
+name: Publish Packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@developsergiotomas'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm run build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@developsergiotomas:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
+      - name: Update package.json for GitHub Packages
+        run: |
+          # Update shared package
+          cd packages/shared
+          npm pkg set name="@developsergiotomas/shared"
+          npm pkg set repository.url="git+https://github.com/developsergiotomas/microstore.git"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+          
+          # Update ui package
+          cd ../ui
+          npm pkg set name="@developsergiotomas/ui"
+          npm pkg set repository.url="git+https://github.com/developsergiotomas/microstore.git"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+
+      - name: Publish shared package
+        run: |
+          cd packages/shared
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish ui package
+        run: |
+          cd packages/ui
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

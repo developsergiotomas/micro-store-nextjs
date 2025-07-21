@@ -1,0 +1,42 @@
+# Dockerfile para desenvolvimento
+FROM node:18-alpine AS base
+
+# Instalar pnpm
+RUN npm install -g pnpm@latest
+
+# Configurar diretório de trabalho
+WORKDIR /app
+
+# Stage para instalar dependências
+FROM base AS dependencies
+
+# Copiar arquivos de configuração do workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+
+# Copiar package.json de todos os pacotes
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/shared/package.json ./packages/shared/
+COPY apps/main/package.json ./apps/main/
+COPY apps/checkout/package.json ./apps/checkout/
+
+# Instalar dependências
+RUN pnpm install --frozen-lockfile
+
+# Stage para desenvolvimento
+FROM base AS development
+
+# Copiar node_modules da stage anterior
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=dependencies /app/packages/ui/node_modules ./packages/ui/node_modules
+COPY --from=dependencies /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=dependencies /app/apps/main/node_modules ./apps/main/node_modules
+COPY --from=dependencies /app/apps/checkout/node_modules ./apps/checkout/node_modules
+
+# Copiar código fonte
+COPY . .
+
+# Expor portas
+EXPOSE 3000 3001
+
+# Comando padrão
+CMD ["pnpm", "dev"]
